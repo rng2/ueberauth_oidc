@@ -32,12 +32,12 @@ defmodule UeberauthOIDC.Mixfile do
 
   defp deps do
     [
-      {:ueberauth, "~> 0.5.0"},
-      {:oidcc, "~> 1.7"},
-
-      # dev
+      {:dialyxir, "~> 0.5", only: :dev, runtime: false},
       {:ex_doc, "~> 0.18", only: :dev, runtime: false},
-      {:dialyxir, "~> 0.5", only: :dev, runtime: false}
+      {:jsone, "~> 1.4", override: true},
+      {:mock, "~> 0.3.0", only: :test},
+      {:oidcc, "~> 1.8"},
+      {:ueberauth, "~> 0.6"}
     ]
   end
 

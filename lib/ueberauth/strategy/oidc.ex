@@ -90,6 +90,19 @@ defmodule Ueberauth.Strategy.OIDC do
         conn
         |> put_private(:ueberauth_oidc_opts, opts)
         |> put_private(:ueberauth_oidc_tokens, tokens)
+        |> maybe_put_userinfo(opts)
+    end
+  end
+
+  defp maybe_put_userinfo(%{private: %{ueberauth_oidc_tokens: tokens}} = conn, opts) do
+    with true <- option(opts, :fetch_userinfo),
+         provider <- get_provider(opts),
+         token <- scrub_value(tokens[:access][:token]),
+         {:ok, user_info} <- :oidcc.retrieve_user_info(token, provider) do
+      user_info = for {k, v} <- user_info, do: {to_string(k), v}, into: %{}
+      put_private(conn, :ueberauth_oidc_user_info, user_info)
+    else
+      _ -> conn
     end
   end
 
@@ -98,6 +111,7 @@ defmodule Ueberauth.Strategy.OIDC do
     conn
     |> put_private(:ueberauth_oidc_opts, nil)
     |> put_private(:ueberauth_oidc_tokens, nil)
+    |> put_private(:ueberauth_oidc_user_info, nil)
   end
 
   @doc """
@@ -105,8 +119,16 @@ defmodule Ueberauth.Strategy.OIDC do
   """
   def uid(conn) do
     private = conn.private
-    uid_field = option(private.ueberauth_oidc_opts, :uid_field)
-    scrub_value(private.ueberauth_oidc_tokens[:id][:claims][uid_field])
+
+    with true <- option(private.ueberauth_oidc_opts, :fetch_userinfo),
+         user_info <- option(private.ueberauth_oidc_opts, :userinfo_uid_field),
+         true <- is_bitstring(user_info) do
+      scrub_value(private.ueberauth_oidc_user_info[user_info])
+    else
+      _ ->
+        uid_field = option(private.ueberauth_oidc_opts, :uid_field)
+        scrub_value(private.ueberauth_oidc_tokens[:id][:claims][uid_field])
+    end
   end
 
   @doc """
@@ -117,6 +139,7 @@ defmodule Ueberauth.Strategy.OIDC do
   def credentials(conn) do
     private = conn.private
     tokens = conn.private.ueberauth_oidc_tokens
+    user_info = conn.private[:ueberauth_oidc_user_info]
 
     exp_at =
       tokens[:access][:expires]
@@ -131,6 +154,7 @@ defmodule Ueberauth.Strategy.OIDC do
       expires_at: exp_at,
       scopes: scrub_value(tokens[:scope][:list]),
       other: %{
+        user_info: user_info,
         provider: get_provider(private.ueberauth_oidc_opts),
         id_token: scrub_value(tokens[:id][:token])
       }
